@@ -77,6 +77,7 @@ final class FuzzEngine: ObservableObject {
 
     private var fileQueue: [URL] = []
     private var processedFiles: Set<String> = []
+    private var enqueuedFiles: Set<String> = []
     private var isProcessingQueue = false
     private let engineQueue = DispatchQueue(label: "com.khalifa.pdfprobe.engine", qos: .utility)
 
@@ -112,6 +113,9 @@ final class FuzzEngine: ObservableObject {
     // otherwise trip a system prompt. Nothing to request here.
     func requestPermissionsAndBootstrap() {
         ProbeLog.loop.log("PDF_NO_PERMS_REQUIRED")
+        ProbeLog.loop.log("ROOT_DIR \(docsRootURL.path, privacy: .public)")
+        ProbeLog.loop.log("IN_DIR \(docsInURL.path, privacy: .public)")
+        ProbeLog.loop.log("OUT_DIR \(docsOutURL.path, privacy: .public)")
         bootstrapExistingFiles()
         startWatchingInDirectory()
     }
@@ -180,7 +184,8 @@ final class FuzzEngine: ObservableObject {
     func enqueue(urls: [URL]) {
         engineQueue.async { [weak self] in
             guard let self = self else { return }
-            let fresh = urls.filter { !self.processedFiles.contains($0.path) }
+            let fresh = urls.filter { !self.processedFiles.contains($0.path) && !self.enqueuedFiles.contains($0.path) }
+            for u in fresh { self.enqueuedFiles.insert(u.path) }
             self.fileQueue.append(contentsOf: fresh)
             DispatchQueue.main.async {
                 self.totalCount += fresh.count
@@ -238,7 +243,12 @@ final class FuzzEngine: ObservableObject {
 
     private func processOneFile(_ url: URL, completion: @escaping () -> Void) {
         let name = url.lastPathComponent
-        ProbeLog.start.log("PDF_START \(name, privacy: .public)")
+        let fm = FileManager.default
+        let srcExists = fm.fileExists(atPath: url.path)
+        let outExists = fm.fileExists(atPath: docsOutURL.path)
+        let destExists = fm.fileExists(atPath: docsOutURL.appendingPathComponent(name).path)
+        ProbeLog.start.log("PDF_START \(name, privacy: .public) srcExists=\(srcExists) outExists=\(outExists) destExists=\(destExists)")
+        ProbeLog.start.log("PDF_PATH \(name, privacy: .public):\(url.path, privacy: .public)")
         uiLog.append("--- \(name) ---")
 
         let pdfEngine = PDFEngine(url: url, name: name, uiLog: uiLog, outDirURL: docsOutURL)
@@ -288,15 +298,12 @@ final class PDFEngine {
     }
 
     func run(completion: @escaping () -> Void) {
-        workQueue.async { [weak self] in
-            guard let self = self else {
-                completion()
-                return
-            }
-            self.process()
-            DispatchQueue.main.async {
-                completion()
-            }
+        // Synchronous execution on the caller's serial queue: guarantees exactly
+        // one file is processed at a time and eliminates the rescan/move race
+        // that re-enqueued files and double-processed them.
+        self.process()
+        DispatchQueue.main.async {
+            completion()
         }
     }
 
@@ -305,6 +312,7 @@ final class PDFEngine {
         guard let document = CGPDFDocument(url as CFURL) else {
             let reason = "CGPDFDocument creation failed"
             ProbeLog.err.log("PDF_ERR \(self.name, privacy: .public):\(reason)")
+            ProbeLog.err.log("PDF_ERR_PATH \(self.name, privacy: .public):\(self.url.path, privacy: .public) exists=\(FileManager.default.fileExists(atPath: self.url.path))")
             self.uiLog.append("PDF_ERR \(self.name): \(reason)")
             self.moveToOut()
             return
@@ -409,14 +417,19 @@ final class PDFEngine {
     private func moveToOut() {
         let fm = FileManager.default
         let dest = outDirURL.appendingPathComponent(name)
+        let srcExists = fm.fileExists(atPath: url.path)
+        let outExists = fm.fileExists(atPath: outDirURL.path)
+        if fm.fileExists(atPath: dest.path) {
+            // Destination already holds this file (duplicate pass). Never delete it.
+            ProbeLog.loop.log("PDF_MOVED_DUP \(self.name, privacy: .public) -> Out (already present)")
+            return
+        }
         do {
-            if fm.fileExists(atPath: dest.path) {
-                try fm.removeItem(at: dest)
-            }
             try fm.moveItem(at: url, to: dest)
             ProbeLog.loop.log("PDF_MOVED \(self.name, privacy: .public) -> Out")
         } catch {
             ProbeLog.err.log("PDF_MOVE_ERR \(self.name, privacy: .public):\(error.localizedDescription, privacy: .public)")
+            ProbeLog.err.log("PDF_MOVE_STATE \(self.name, privacy: .public) srcExists=\(srcExists) outExists=\(outExists) srcPath=\(self.url.path, privacy: .public) outPath=\(outDirURL.path, privacy: .public)")
             // Best-effort fallback: copy (leave original in place for inspection).
             try? fm.copyItem(at: url, to: dest)
         }
