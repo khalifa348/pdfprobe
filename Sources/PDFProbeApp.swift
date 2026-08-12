@@ -123,6 +123,10 @@ final class FuzzEngine: ObservableObject {
     // MARK: Bootstrap — process files already present at launch
 
     func bootstrapExistingFiles() {
+        // Lab instrument: give the oslog capture time to attach before we start.
+        ProbeLog.loop.log("BOOTSTRAP_DELAY start=60s")
+        sleep(60)
+        ProbeLog.loop.log("BOOTSTRAP_DELAY done")
         let fm = FileManager.default
         var urls: [URL] = []
 
@@ -214,6 +218,7 @@ final class FuzzEngine: ObservableObject {
     private func drainQueueLoop() {
         guard let next = fileQueue.first else {
             isProcessingQueue = false
+            ProbeLog.loop.log("PDF_DONE_TOTAL processed=\(self.processedCount, privacy: .public)")
             DispatchQueue.main.async {
                 self.statusText = "Idle (queue empty)"
                 self.isRunning = false
@@ -420,9 +425,10 @@ final class PDFEngine {
         let srcExists = fm.fileExists(atPath: url.path)
         let outExists = fm.fileExists(atPath: outDirURL.path)
         if fm.fileExists(atPath: dest.path) {
-            // Destination already holds this file (duplicate pass). Never delete it.
-            ProbeLog.loop.log("PDF_MOVED_DUP \(self.name, privacy: .public) -> Out (already present)")
-            return
+            // Overwrite semantics: safe now that processing is serial (no duplicate
+            // passes racing). Remove the stale destination, then move.
+            ProbeLog.loop.log("PDF_MOVED_DUP \(self.name, privacy: .public) -> Out (overwriting stale dest)")
+            try? fm.removeItem(at: dest)
         }
         do {
             try fm.moveItem(at: url, to: dest)
