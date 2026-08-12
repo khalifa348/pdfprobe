@@ -124,9 +124,16 @@ final class FuzzEngine: ObservableObject {
 
     func bootstrapExistingFiles() {
         // Lab instrument: give the oslog capture time to attach before we start.
+        // MUST NOT block the main thread (launch watchdog) — dispatch asynchronously.
         ProbeLog.loop.log("BOOTSTRAP_DELAY start=60s")
-        sleep(60)
-        ProbeLog.loop.log("BOOTSTRAP_DELAY done")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 60) { [weak self] in
+            guard let self = self else { return }
+            ProbeLog.loop.log("BOOTSTRAP_DELAY done")
+            self.scanAndEnqueue()
+        }
+    }
+
+    private func scanAndEnqueue() {
         let fm = FileManager.default
         var urls: [URL] = []
 
