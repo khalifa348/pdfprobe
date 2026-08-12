@@ -14,7 +14,7 @@
 //       fail -> PDF_ERR <name>:<reason>  (move to Out, continue)
 //       ok   -> PDF_PAGES <name>:<n>
 //    -> render each page at 72 dpi -> PDF_RENDER <name>:<page>
-//    -> CGPDFDocumentGetCatalog + CGPDFDocumentGetInfo
+//    -> document.catalog + document.info
 //       -> PDF_TRAILER <name>:<keys>
 //    PDF_DONE <name>  (move to Out)
 //  Whole-per-file op guarded by a 60s watchdog (PDF_HANG) so one file can
