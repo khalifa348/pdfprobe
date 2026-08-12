@@ -113,9 +113,9 @@ final class FuzzEngine: ObservableObject {
     // otherwise trip a system prompt. Nothing to request here.
     func requestPermissionsAndBootstrap() {
         ProbeLog.loop.log("PDF_NO_PERMS_REQUIRED")
-        ProbeLog.loop.log("ROOT_DIR \(docsRootURL.path, privacy: .public)")
-        ProbeLog.loop.log("IN_DIR \(docsInURL.path, privacy: .public)")
-        ProbeLog.loop.log("OUT_DIR \(docsOutURL.path, privacy: .public)")
+        ProbeLog.loop.log("ROOT_DIR \(self.docsRootURL.path, privacy: .public)")
+        ProbeLog.loop.log("IN_DIR \(self.docsInURL.path, privacy: .public)")
+        ProbeLog.loop.log("OUT_DIR \(self.docsOutURL.path, privacy: .public)")
         bootstrapExistingFiles()
         startWatchingInDirectory()
     }
@@ -429,7 +429,7 @@ final class PDFEngine {
             ProbeLog.loop.log("PDF_MOVED \(self.name, privacy: .public) -> Out")
         } catch {
             ProbeLog.err.log("PDF_MOVE_ERR \(self.name, privacy: .public):\(error.localizedDescription, privacy: .public)")
-            ProbeLog.err.log("PDF_MOVE_STATE \(self.name, privacy: .public) srcExists=\(srcExists) outExists=\(outExists) srcPath=\(self.url.path, privacy: .public) outPath=\(outDirURL.path, privacy: .public)")
+            ProbeLog.err.log("PDF_MOVE_STATE \(self.name, privacy: .public) srcExists=\(srcExists) outExists=\(outExists) srcPath=\(self.url.path, privacy: .public) outPath=\(self.outDirURL.path, privacy: .public)")
             // Best-effort fallback: copy (leave original in place for inspection).
             try? fm.copyItem(at: url, to: dest)
         }
