@@ -373,14 +373,12 @@ final class PDFEngine {
 
     private func dictKeys(_ dict: CGPDFDictionaryRef) -> [String] {
         var keys: [String] = []
-        let infoPtr = UnsafeMutableRawPointer(&keys)
-        CGPDFDictionaryApplyBlock(dict, { key, _, info in
-            let k = String(cString: key)
-            if let info {
-                info.assumingMemoryBound(to: [String].self).pointee.append(k)
+        CGPDFDictionaryApplyBlock(dict, { key, _, _ in
+            if let key {
+                keys.append(String(cString: key))
             }
             return true
-        }, infoPtr)
+        }, nil)
         return keys
     }
 
