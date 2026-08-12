@@ -374,9 +374,7 @@ final class PDFEngine {
     private func dictKeys(_ dict: CGPDFDictionaryRef) -> [String] {
         var keys: [String] = []
         CGPDFDictionaryApplyBlock(dict, { key, _, _ in
-            if let key {
-                keys.append(String(cString: key))
-            }
+            keys.append(String(cString: key))
             return true
         }, nil)
         return keys
