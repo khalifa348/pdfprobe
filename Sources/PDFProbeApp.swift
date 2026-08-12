@@ -362,7 +362,7 @@ final class PDFEngine {
         ctx.saveGState()
         // PDF points are bottom-left origin; CG contexts are bottom-left by
         // default. Draw the page into its media box coordinate space.
-        ctx.draw(page, in: box)
+        ctx.drawPDFPage(page)
         ctx.restoreGState()
         // Force a flush so the rasterizer must complete before we move on.
         ctx.flush()
@@ -371,24 +371,37 @@ final class PDFEngine {
         self.uiLog.append("PDF_RENDER \(self.name): \(index) \(pxW)x\(pxH)")
     }
 
+    private func dictKeys(_ dict: CGPDFDictionaryRef) -> [String] {
+        var keys: [String] = []
+        let infoPtr = UnsafeMutableRawPointer(&keys)
+        CGPDFDictionaryApplyBlock(dict, { key, _, info in
+            let k = String(cString: key)
+            if let info {
+                info.assumingMemoryBound(to: [String].self).pointee.append(k)
+            }
+            return true
+        }, infoPtr)
+        return keys
+    }
+
     private func dumpTrailer(_ document: CGPDFDocument) {
         guard let catalog = document.catalog else {
             ProbeLog.meta.log("PDF_TRAILER \(self.name, privacy: .public):CATALOG_NULL")
             self.uiLog.append("PDF_TRAILER \(self.name): CATALOG_NULL")
             return
         }
-        let catalogKeys = (catalog as NSDictionary).allKeys.compactMap { ($0 as? String).map { s in
+        let catalogKeys = dictKeys(catalog).map { s in
             s.trimmingCharacters(in: .whitespacesAndNewlines)
-        } }.filter { !$0.isEmpty }
+        }.filter { !$0.isEmpty }
 
-        guard let info = CGPDFDocumentGetInfo(document) else {
+        guard let info = document.info else {
             ProbeLog.meta.log("PDF_TRAILER \(self.name, privacy: .public):INFO_NULL")
             self.uiLog.append("PDF_TRAILER \(self.name): INFO_NULL")
             return
         }
 
-        let infoKeys = (info as NSDictionary).allKeys.compactMap { key in
-            (key as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let infoKeys = dictKeys(info).map { key in
+            key.trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
 
         let joinedCatalog = catalogKeys.joined(separator: ",")
